@@ -345,6 +345,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyDataBtn = document.getElementById('copy-data-btn');
   if (copyDataBtn) {
     copyDataBtn.addEventListener('click', copySlipData);
+    
+    // =========================================================================
+    // ส่วนที่เพิ่มใหม่: สร้างปุ่ม "บันทึกลงบัญชี ERme" แทรกต่อจากปุ่มคัดลอก
+    // =========================================================================
+    if (!document.getElementById('save-erme-btn')) {
+      const saveErmeBtn = document.createElement('button');
+      saveErmeBtn.id = 'save-erme-btn';
+      saveErmeBtn.className = copyDataBtn.className || 'btn btn-primary';
+      saveErmeBtn.style.cssText = copyDataBtn.style.cssText;
+      saveErmeBtn.style.backgroundColor = '#00c300'; // สีเขียวสไตล์ LINE
+      saveErmeBtn.style.color = 'white';
+      saveErmeBtn.style.marginTop = '10px';
+      saveErmeBtn.style.width = '100%';
+      saveErmeBtn.style.border = 'none';
+      saveErmeBtn.style.padding = '10px';
+      saveErmeBtn.style.borderRadius = '8px';
+      saveErmeBtn.style.fontWeight = 'bold';
+      saveErmeBtn.style.cursor = 'pointer';
+      saveErmeBtn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> บันทึกลงบัญชี ERme';
+      
+      saveErmeBtn.addEventListener('click', () => {
+        if (window.slipVerifier && window.slipVerifier.currentSlipData) {
+          sendDataToERme(window.slipVerifier.currentSlipData);
+        } else {
+          window.slipVerifier.showToast('ไม่มีข้อมูลสลิปสำหรับบันทึก', 'warning');
+        }
+      });
+      
+      // แทรกปุ่มต่อจากปุ่มคัดลอกในหน้า HTML
+      copyDataBtn.parentNode.insertBefore(saveErmeBtn, copyDataBtn.nextSibling);
+    }
   }
 });
 
@@ -361,8 +392,8 @@ async function copySlipData() {
     const formattedData = `ข้อมูลสลิปการโอนเงิน
 ===================
 ธนาคาร: ${data.bank?.name || '-'}
-จำนวนเงิน: ${SlipParser.formatAmount(data.amount)}
-วันที่-เวลา: ${SlipParser.formatDateTime(data.datetime)}
+จำนวนเงิน: ${SlipParser.formatAmount ? SlipParser.formatAmount(data.amount) : data.amount}
+วันที่-เวลา: ${SlipParser.formatDateTime ? SlipParser.formatDateTime(data.datetime) : data.datetime}
 ผู้โอน: ${data.sender || '-'}
 ผู้รับ: ${data.receiver || '-'}
 รหัสอ้างอิง: ${data.reference || '-'}
@@ -443,3 +474,68 @@ window.SlipVerifierApp = {
   restart: () => location.reload(),
   version: '1.0.0'
 };
+
+// ============================================================================
+// ฟังก์ชันใหม่: สำหรับส่งข้อมูลไปบันทึกลงฐานข้อมูล ERme (Google Sheets ผ่าน GAS)
+// ============================================================================
+async function sendDataToERme(parsedSlipData) {
+  // ลิงก์ Web App URL ที่คุณให้มา
+  const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzYTTZuYODNuBGZ6ksk4smqgStgiJ42ilxpyEdjhbXPDTYcBR646E06150rpxNCVF-rBg/exec";
+  
+  // แปลงจำนวนเงินให้เป็นตัวเลขเพียวๆ ไม่มีคอมม่า เพื่อให้ลงบัญชีได้ง่าย
+  let amountStr = parsedSlipData.amount ? String(parsedSlipData.amount).replace(/,/g, '') : "0";
+  
+  // สร้างโครงสร้าง Payload
+  const payload = {
+    action: "save_slip_from_frontend",
+    amount: amountStr, 
+    datetime: parsedSlipData.datetime || "ไม่ระบุ",
+    sender: parsedSlipData.sender || "-",
+    receiver: parsedSlipData.receiver || "-"
+  };
+
+  const btn = document.getElementById('save-erme-btn');
+
+  try {
+    // เปลี่ยนสถานะปุ่ม
+    if(btn) {
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังบันทึกข้อมูล...';
+      btn.disabled = true;
+    }
+
+    // ยิง Request เข้าสู่ระบบ GAS (ใช้แบบ text/plain ป้องกันปัญหา CORS ฝั่งเบราว์เซอร์)
+    const response = await fetch(GAS_WEB_APP_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    
+    const result = await response.json();
+    if (result.status === "success") {
+      if(window.slipVerifier) {
+        window.slipVerifier.showToast('✅ บันทึกลงบัญชี ERme เรียบร้อยแล้ว!', 'success');
+      } else {
+        alert("✅ บันทึกลงบัญชี ERme เรียบร้อยแล้ว!");
+      }
+    } else {
+      if(window.slipVerifier) {
+        window.slipVerifier.showToast('❌ เกิดข้อผิดพลาด: ' + result.message, 'error');
+      } else {
+        alert("❌ เกิดข้อผิดพลาด: " + result.message);
+      }
+    }
+    
+  } catch (error) {
+    console.error("Error sending to GAS:", error);
+    if(window.slipVerifier) {
+      window.slipVerifier.showToast('❌ ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้', 'error');
+    } else {
+      alert("❌ ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้");
+    }
+  } finally {
+    // คืนสถานะปุ่มให้กลับมาเหมือนเดิม
+    if(btn) {
+      btn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> บันทึกลงบัญชี ERme';
+      btn.disabled = false;
+    }
+  }
+}

@@ -1,143 +1,267 @@
 /**
- * SlipParser.js (Updated with PromptPayQRParser)
- * วิเคราะห์และแยกข้อมูลจากข้อความสลิปการโอนเงิน
- * รองรับธนาคารไทยหลักทั้งหมด และ QR Code parsing ตามมาตรฐาน
+ * SlipParser.js  (v2.0 — Improved)
+ * ===================================
+ * ✅ แก้บั๊ก:  ทุก field ที่หาไม่เจอคืน '-' แทน null
+ *             (ป้องกัน "null" โชว์ในหน้าเว็บเมื่อใช้ string concat)
+ * ✅ เพิ่ม:    ธนาคาร BAY / TTB / UOB / CIMB / TISCO / LH / ICBC / PromptPay
+ * ✅ ปรับปรุง: Regex ผู้รับ ครอบคลุมทุกรูปแบบสลิปไทย
+ * ✅ ปรับปรุง: Regex วันที่-เวลา รองรับ OCR artifacts จาก fixThaiSpacing
+ *             (เช่น space หายหลัง : → "14: 30", วันที่ชนกัน "01/06/202514: 30")
+ * ✅ ปรับปรุง: identifyBank() ใช้ case-insensitive matching
+ * ✅ ปรับปรุง: calculateConfidence() ตรวจว่าไม่ใช่ '-' ด้วย
  */
 class SlipParser {
   constructor() {
-    // ข้อมูลธนาคารไทย
+
+    // ══════════════════════════════════════════════════════
+    // ข้อมูลธนาคารไทย (ครบทุกธนาคาร + case-insensitive)
+    // ══════════════════════════════════════════════════════
     this.banks = {
       'SCB': {
-        name: 'ธนาคารไทยพาณิชย์',
-        keywords: ['ไทยพาณิชย์', 'SCB', 'Siam Commercial Bank'],
-        color: '#4e1a8b',
-        logo: 'assets/bank-logos/scb.png'
+        name    : 'ธนาคารไทยพาณิชย์',
+        keywords: ['ไทยพาณิชย์', 'SCB', 'Siam Commercial', 'Thai Commercial'],
+        color   : '#4e1a8b',
+        logo    : 'assets/bank-logos/scb.png',
       },
       'KBANK': {
-        name: 'ธนาคารกสิกรไทย',
-        keywords: ['กสิกรไทย', 'KBANK', 'Kasikorn Bank', 'K-Bank'],
-        color: '#16a34a',
-        logo: 'assets/bank-logos/kbank.png'
+        name    : 'ธนาคารกสิกรไทย',
+        keywords: ['กสิกรไทย', 'KBANK', 'KBank', 'Kasikorn', 'K-Bank', 'กสิกร'],
+        color   : '#16a34a',
+        logo    : 'assets/bank-logos/kbank.png',
       },
       'BBL': {
-        name: 'ธนาคารกรุงเทพ',
-        keywords: ['กรุงเทพ', 'BBL', 'Bangkok Bank'],
-        color: '#1e40af',
-        logo: 'assets/bank-logos/bbl.png'
+        name    : 'ธนาคารกรุงเทพ',
+        keywords: ['กรุงเทพ', 'BBL', 'Bangkok Bank', 'Bualuang'],
+        color   : '#1e40af',
+        logo    : 'assets/bank-logos/bbl.png',
       },
       'KTB': {
-        name: 'ธนาคารกรุงไทย',
-        keywords: ['กรุงไทย', 'KTB', 'Krung Thai Bank'],
-        color: '#1e7e34',
-        logo: 'assets/bank-logos/ktb.png'
+        name    : 'ธนาคารกรุงไทย',
+        keywords: ['กรุงไทย', 'KTB', 'Krung Thai', 'Krungthai'],
+        color   : '#00a651',
+        logo    : 'assets/bank-logos/ktb.png',
+      },
+      'BAY': {
+        name    : 'ธนาคารกรุงศรีอยุธยา',
+        keywords: ['กรุงศรี', 'BAY', 'Krungsri', 'Ayudhya', 'กรุงศรีอยุธยา'],
+        color   : '#fbbf24',
+        logo    : 'assets/bank-logos/bay.png',
       },
       'TMB': {
-        name: 'ธนาคารทหารไทย',
-        keywords: ['ทหารไทย', 'TMB', 'TMB Bank'],
-        color: '#6366f1',
-        logo: 'assets/bank-logos/tmb.png'
+        name    : 'ธนาคารทีเอ็มบี ธนชาต (TTB)',
+        keywords: ['ทหารไทย', 'TTB', 'TMB', 'Thanachart', 'ธนชาต', 'ทีทีบี', 'TMBThanachart'],
+        color   : '#0369a1',
+        logo    : 'assets/bank-logos/tmb.png',
       },
       'GSB': {
-        name: 'ธนาคารออมสิน',
-        keywords: ['ออมสิน', 'GSB', 'Government Savings Bank'],
-        color: '#dc2626',
-        logo: 'assets/bank-logos/gsb.png'
+        name    : 'ธนาคารออมสิน',
+        keywords: ['ออมสิน', 'GSB', 'Government Savings'],
+        color   : '#dc2626',
+        logo    : 'assets/bank-logos/gsb.png',
       },
       'BAAC': {
-        name: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร',
-        keywords: ['เกษตรและสหกรณ์', 'BAAC', 'เกษตร'],
-        color: '#059669',
-        logo: 'assets/bank-logos/baac.png'
-      }
+        name    : 'ธ.ก.ส.',
+        keywords: ['เกษตรและสหกรณ์', 'BAAC', 'ธกส', 'ธ.ก.ส', 'เกษตร'],
+        color   : '#059669',
+        logo    : 'assets/bank-logos/baac.png',
+      },
+      'UOB': {
+        name    : 'ธนาคารยูโอบี',
+        keywords: ['UOB', 'ยูโอบี', 'United Overseas'],
+        color   : '#1d4ed8',
+        logo    : 'assets/bank-logos/uob.png',
+      },
+      'CIMB': {
+        name    : 'ธนาคารซีไอเอ็มบีไทย',
+        keywords: ['CIMB', 'ซีไอเอ็มบี'],
+        color   : '#dc2626',
+        logo    : 'assets/bank-logos/cimb.png',
+      },
+      'TISCO': {
+        name    : 'ธนาคารทิสโก้',
+        keywords: ['TISCO', 'ทิสโก้'],
+        color   : '#0284c7',
+        logo    : 'assets/bank-logos/tisco.png',
+      },
+      'LH': {
+        name    : 'ธนาคารแลนด์ แอนด์ เฮ้าส์',
+        keywords: ['แลนด์', 'LH Bank', 'LHBank', 'Land and House'],
+        color   : '#7c3aed',
+        logo    : 'assets/bank-logos/lh.png',
+      },
+      'ICBC': {
+        name    : 'ธนาคารไอซีบีซี (ไทย)',
+        keywords: ['ICBC', 'ไอซีบีซี'],
+        color   : '#dc2626',
+        logo    : 'assets/bank-logos/icbc.png',
+      },
+      'PROMPTPAY': {
+        name    : 'พร้อมเพย์ / PromptPay',
+        keywords: ['พร้อมเพย์', 'PromptPay', 'Prompt Pay', 'พร้อมเพย์'],
+        color   : '#0284c7',
+        logo    : 'assets/bank-logos/promptpay.png',
+      },
     };
 
-    // รูปแบบการค้นหาข้อมูล
+    // ══════════════════════════════════════════════════════
+    // Regex Patterns
+    // หมายเหตุ: OCRProcessor.fixThaiSpacing จะ:
+    //   1) ลบ whitespace ทั้งหมดในบรรทัด
+    //   2) เพิ่ม space หลัง ':'  → "จำนวนเงิน: 150"
+    //   3) เพิ่ม space ระหว่างตัวเลข↔ตัวอักษรไทย
+    // ดังนั้น pattern ต้องรองรับ:
+    //   "14: 30"       (space หลัง colon ใน timestamp)
+    //   "01/06/2568"   (ไม่มี space ระหว่างวันที่)
+    //   "นายสมชายทองดี" (ชื่อชนกันไม่มี space)
+    // ══════════════════════════════════════════════════════
     this.patterns = {
-      // จำนวนเงิน
+
+      // ─── จำนวนเงิน ─────────────────────────────────────
       amount: [
-        /จำนวนเงิน[:\s]*฿?\s*([\d,]+\.?\d*)/i,
-        /Amount[:\s]*฿?\s*([\d,]+\.?\d*)/i,
+        /จำนวนเงิน\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /ยอดเงิน\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /ยอดโอน\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /ยอดชำระ\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /Amount\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /Transfer Amount\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        /Total\s*[:\-]\s*฿?\s*([\d,]+\.?\d*)/i,
+        // ฿ นำหน้า เช่น ฿1,500.00
         /฿\s*([\d,]+\.?\d*)/,
-        /([\d,]+\.?\d*)\s*บาท/,
-        /เงิน[:\s]*([\d,]+\.?\d*)/
+        // ตัวเลขตามด้วย บาท/Baht/THB
+        /([\d,]+\.?\d*)\s*(?:บาท|Baht|THB)\b/i,
       ],
 
-      // วันที่และเวลา
+      // ─── วันที่-เวลา ────────────────────────────────────
+      // รองรับ OCR artifact: "14: 30" (space หลัง colon ใน time)
+      // รองรับ: "01/06/202514: 30" (วันที่ชนเวลา ไม่มี space)
       datetime: [
-        /(\d{1,2}\/\d{1,2}\/\d{4})\s*(\d{1,2}:\d{2})/,
-        /(\d{1,2}-\d{1,2}-\d{4})\s*(\d{1,2}:\d{2})/,
-        /วันที่[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/,
-        /เวลา[:\s]*(\d{1,2}:\d{2})/
+        // dd/mm/yyyy HH:MM[:SS] (มาตรฐาน)
+        /(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(\d{1,2}:\s*\d{2}(?::\s*\d{2})?)/,
+        // dd/mm/yyyy ชนกับ HH:MM (ไม่มี space — OCR artifact)
+        /(\d{1,2}\/\d{1,2}\/\d{4})(\d{1,2}:\s*\d{2})/,
+        // dd-mm-yyyy HH:MM
+        /(\d{1,2}-\d{1,2}-\d{2,4})\s*(\d{1,2}:\s*\d{2}(?::\s*\d{2})?)/,
+        // yyyy-mm-dd HH:MM (ISO-ish)
+        /(\d{4}-\d{2}-\d{2})\s*(\d{2}:\s*\d{2}(?::\s*\d{2})?)/,
+        // วันที่: dd/mm/yyyy  [เวลา: HH:MM]
+        /วันที่\s*[:\-]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})(?:\s*(?:เวลา\s*[:\-]\s*)?)?([\d]{1,2}:\s*[\d]{2})?/i,
+        // Date: dd/mm/yyyy  [Time: HH:MM]
+        /Date\s*[:\-]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})(?:\s*(?:Time\s*[:\-]\s*)?)?([\d]{1,2}:\s*[\d]{2})?/i,
+        // เดือนไทยย่อ เช่น "1 มิ.ย. 2568 14: 30"
+        /(\d{1,2}\s+(?:ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d{2,4})(?:\s*([\d]{1,2}:\s*[\d]{2}))?/,
+        // SCB compact: 20250601 143025
+        /(\d{8})\s*(\d{6})/,
+        // fallback: วันที่เท่านั้น (ไม่มีเวลา)
+        /วันที่\s*[:\-]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+        /Date\s*[:\-]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
       ],
 
-      // ผู้โอน
+      // ─── ผู้โอน ─────────────────────────────────────────
       sender: [
-        /จาก[:\s]*(.+?)(?=\s*ไปยัง|\s*ถึง|\s*To|\n|$)/i,
-        /From[:\s]*(.+?)(?=\s*To|\s*ไปยัง|\n|$)/i,
-        /ผู้โอน[:\s]*(.+?)(?=\s*ผู้รับ|\s*ไปยัง|\n|$)/i
+        /ผู้โอน\s*[:\-]\s*(.+?)(?=\n|ผู้รับ|ไปยัง|ถึง|To|จำนวน|Amount|$)/i,
+        /ชื่อผู้โอน\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /โอนจาก\s*[:\-]\s*(.+?)(?=\n|ไปยัง|ถึง|จำนวน|$)/i,
+        /จาก\s*[:\-]\s*(.+?)(?=\n|ไปยัง|ถึง|To|จำนวน|Amount|$)/i,
+        /From\s*[:\-]\s*(.+?)(?=\n|To|ไปยัง|จำนวน|Amount|$)/i,
+        /บัญชีต้นทาง\s*[:\-]\s*(.+?)(?=\n|บัญชีปลายทาง|จำนวน|$)/i,
+        /Source Account\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /Sender\s*[:\-]\s*(.+?)(?=\n|Receiver|To|จำนวน|$)/i,
       ],
 
-      // ผู้รับ
+      // ─── ผู้รับ ─────────────────────────────────────────
+      // ✅ เพิ่มหลาย pattern สำหรับสลิปต่างธนาคาร
       receiver: [
-        /ไปยัง[:\s]*(.+?)(?=\s*จำนวน|\s*Amount|\n|$)/i,
-        /To[:\s]*(.+?)(?=\s*Amount|\s*จำนวน|\n|$)/i,
-        /ผู้รับ[:\s]*(.+?)(?=\s*จำนวน|\s*Amount|\n|$)/i,
-        /ถึง[:\s]*(.+?)(?=\s*จำนวน|\s*Amount|\n|$)/i
+        /ผู้รับ\s*[:\-]\s*(.+?)(?=\n|จำนวน|Amount|เลขที่|Ref|$)/i,
+        /ชื่อผู้รับ\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /โอนไปยัง\s*[:\-]\s*(.+?)(?=\n|จำนวน|Amount|$)/i,
+        /ไปยัง\s*[:\-]\s*(.+?)(?=\n|จำนวน|Amount|เลขที่|Ref|$)/i,
+        /ถึง\s*[:\-]\s*(.+?)(?=\n|จำนวน|Amount|เลขที่|$)/i,
+        /To\s*[:\-]\s*(.+?)(?=\n|Amount|จำนวน|Ref|$)/i,
+        /บัญชีปลายทาง\s*[:\-]\s*(.+?)(?=\n|จำนวน|Amount|$)/i,
+        /Receiver\s*[:\-]\s*(.+?)(?=\n|Amount|จำนวน|Ref|$)/i,
+        /Beneficiary\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /Destination\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /Payee\s*[:\-]\s*(.+?)(?=\n|$)/i,
+        /รับเข้าบัญชี\s*[:\-]\s*(.+?)(?=\n|$)/i,
       ],
 
-      // รหัสอ้างอิง
+      // ─── รหัสอ้างอิง ────────────────────────────────────
       reference: [
-        /รหัสอ้างอิง[:\s]*(.+?)(?=\s|\n|$)/i,
-        /Reference[:\s]*(.+?)(?=\s|\n|$)/i,
-        /Ref[:\s]*(.+?)(?=\s|\n|$)/i,
-        /อ้างอิง[:\s]*(.+?)(?=\s|\n|$)/i,
-        /Transaction ID[:\s]*(.+?)(?=\s|\n|$)/i
-      ]
+        /รหัสอ้างอิง\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /เลขที่อ้างอิง\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /เลขที่รายการ\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /Reference\s*(?:No\.?)?\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /Ref\.?\s*(?:No\.?)?\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /Transaction\s*(?:ID|No\.?)\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /Trans\.\s*No\.\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+        /อ้างอิง\s*[:\-]\s*([A-Za-z0-9\-\/]+)/i,
+      ],
     };
   }
 
+
+  // ════════════════════════════════════════════════════════
+  //  parse()  —  จุดเข้าหลัก
+  // ════════════════════════════════════════════════════════
+
   /**
-   * วิเคราะห์ข้อความและแยกข้อมูลสลิป
+   * วิเคราะห์ข้อความสลิปแล้วคืน Object
+   * ✅ ทุก field ที่หาไม่เจอ = '-'  (ไม่มี null เด็ดขาด)
+   *
+   * @param {string} text  ข้อความที่ได้จาก OCR
+   * @returns {{amount, datetime, sender, receiver, reference, bank, confidence, raw_text}}
    */
   parse(text) {
+    const FALLBACK = '-';
+
+    // ── Default ทุก field เป็น '-' ──────────────────────────
+    // ✅ แก้บั๊กหลัก: เดิมใช้ null ทำให้ string concat แสดงผล "null"
+    //    เช่น: '<span>' + null + '</span>'  →  '<span>null</span>'
+    //    แก้แล้ว: '<span>' + '-' + '</span>'  →  '<span>-</span>'
     const result = {
-      amount: null,
-      datetime: null,
-      sender: null,
-      receiver: null,
-      reference: null,
-      bank: null,
+      amount    : FALLBACK,
+      datetime  : FALLBACK,
+      sender    : FALLBACK,
+      receiver  : FALLBACK,
+      reference : FALLBACK,
+      bank      : FALLBACK,
       confidence: 0,
-      raw_text: text
+      raw_text  : text || '',
     };
 
     if (!text || text.trim().length === 0) {
       return result;
     }
 
-    // ระบุธนาคาร
-    result.bank = this.identifyBank(text);
+    // ── Extract ──────────────────────────────────────────────
+    result.bank = this.identifyBank(text) || FALLBACK;
 
-    // แยกข้อมูลตามรูปแบบ
-    result.amount = this.extractAmount(text);
-    result.datetime = this.extractDateTime(text);
-    result.sender = this.extractSender(text);
-    result.receiver = this.extractReceiver(text);
-    result.reference = this.extractReference(text);
+    const amount = this.extractAmount(text);
+    result.amount = (amount !== null && !isNaN(amount)) ? amount : FALLBACK;
 
-    // คำนวณความมั่นใจ
+    result.datetime  = this.extractDateTime(text)  || FALLBACK;
+    result.sender    = this.extractSender(text)    || FALLBACK;
+    result.receiver  = this.extractReceiver(text)  || FALLBACK;
+    result.reference = this.extractReference(text) || FALLBACK;
+
     result.confidence = this.calculateConfidence(result);
 
     return result;
   }
 
+
+  // ════════════════════════════════════════════════════════
+  //  identifyBank()
+  // ════════════════════════════════════════════════════════
+
   /**
-   * ระบุธนาคารจากข้อความ
+   * ✅ ใช้ toUpperCase() ทั้งสองฝั่ง → case-insensitive matching
    */
   identifyBank(text) {
+    const upper = text.toUpperCase();
     for (const [code, bank] of Object.entries(this.banks)) {
-      for (const keyword of bank.keywords) {
-        if (text.includes(keyword)) {
+      for (const kw of bank.keywords) {
+        if (upper.includes(kw.toUpperCase())) {
           return code;
         }
       }
@@ -145,98 +269,122 @@ class SlipParser {
     return null;
   }
 
-  /**
-   * แยกจำนวนเงิน
-   */
+
+  // ════════════════════════════════════════════════════════
+  //  extractAmount()
+  // ════════════════════════════════════════════════════════
+
   extractAmount(text) {
     for (const pattern of this.patterns.amount) {
-      const match = text.match(pattern);
-      if (match) {
-        const amount = parseFloat(match[1].replace(/,/g, ''));
-        if (!isNaN(amount) && amount > 0) {
-          return amount;
-        }
+      const m = text.match(pattern);
+      if (m && m[1]) {
+        const n = parseFloat(m[1].replace(/,/g, ''));
+        if (!isNaN(n) && n > 0) return n;
       }
     }
     return null;
   }
 
+
+  // ════════════════════════════════════════════════════════
+  //  extractDateTime()
+  // ════════════════════════════════════════════════════════
+
   /**
-   * แยกวันที่และเวลา
+   * ✅ แก้บั๊ก: รับประกันว่าจะไม่ return undefined
+   *    ทุก branch คืน string หรือ null
+   *    null จะถูก parse() แปลงเป็น '-' ก่อนบันทึก
+   *
+   * ✅ รองรับ OCR artifact "14: 30" → normalize เป็น "14:30"
    */
   extractDateTime(text) {
     for (const pattern of this.patterns.datetime) {
-      const match = text.match(pattern);
-      if (match) {
-        if (match.length >= 3) {
-          return `${match[1]} ${match[2]}`;
-        } else {
-          return match[1];
-        }
+      const m = text.match(pattern);
+      if (!m) continue;
+
+      const datePart = m[1] ? m[1].trim() : null;
+      const timePart = m[2] ? m[2].trim() : null;
+
+      if (!datePart) continue;
+
+      // Normalize "14: 30" → "14:30"  (OCR เพิ่ม space หลัง colon)
+      const normalizeTime = (t) => t ? t.replace(/:\s+/g, ':') : null;
+
+      if (timePart) {
+        return `${datePart} ${normalizeTime(timePart)}`;
       }
+      return datePart;
     }
-    return null;
+    return null;  // parse() จะแปลงเป็น '-'
   }
 
-  /**
-   * แยกผู้โอน
-   */
+
+  // ════════════════════════════════════════════════════════
+  //  extractSender / extractReceiver / extractReference
+  // ════════════════════════════════════════════════════════
+
   extractSender(text) {
     for (const pattern of this.patterns.sender) {
-      const match = text.match(pattern);
-      if (match) {
-        return match[1].trim();
+      const m = text.match(pattern);
+      if (m && m[1]) {
+        const val = m[1].trim();
+        // กรองค่าที่ไม่สมเหตุสมผล (ว่าง หรือยาวเกินไป)
+        if (val.length > 0 && val.length < 120) return val;
       }
     }
     return null;
   }
 
-  /**
-   * แยกผู้รับ
-   */
   extractReceiver(text) {
     for (const pattern of this.patterns.receiver) {
-      const match = text.match(pattern);
-      if (match) {
-        return match[1].trim();
+      const m = text.match(pattern);
+      if (m && m[1]) {
+        const val = m[1].trim();
+        if (val.length > 0 && val.length < 120) return val;
       }
     }
     return null;
   }
 
-  /**
-   * แยกรหัสอ้างอิง
-   */
   extractReference(text) {
     for (const pattern of this.patterns.reference) {
-      const match = text.match(pattern);
-      if (match) {
-        return match[1].trim();
+      const m = text.match(pattern);
+      if (m && m[1]) {
+        const val = m[1].trim();
+        if (val.length > 0) return val;
       }
     }
     return null;
   }
 
+
+  // ════════════════════════════════════════════════════════
+  //  calculateConfidence()
+  // ════════════════════════════════════════════════════════
+
   /**
-   * คำนวณความมั่นใจ
+   * ✅ แก้บั๊ก: ตรวจสอบว่าค่าไม่ใช่ '-' ด้วย
+   *    เดิม: if (result[field])  → '-' ก็ถือว่า truthy → score สูงเกินจริง
+   *    แก้แล้ว: ตรวจว่าไม่ใช่ FALLBACK ด้วย
    */
   calculateConfidence(result) {
-    let score = 0;
+    const FALLBACK = '-';
     const weights = {
-      amount: 30,
-      datetime: 20,
-      sender: 15,
-      receiver: 15,
-      reference: 10,
-      bank: 10
+      amount    : 30,
+      datetime  : 20,
+      sender    : 15,
+      receiver  : 15,
+      reference : 10,
+      bank      : 10,
     };
 
-    Object.keys(weights).forEach(field => {
-      if (result[field]) {
-        score += weights[field];
+    let score = 0;
+    for (const [field, weight] of Object.entries(weights)) {
+      const val = result[field];
+      if (val !== null && val !== undefined && val !== FALLBACK) {
+        score += weight;
       }
-    });
-
+    }
     return Math.min(score, 100);
   }
 }

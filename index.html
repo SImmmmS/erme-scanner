@@ -38,75 +38,69 @@
     </style>
 </head>
 <body>
-
     <div class="container">
         <div class="header">
             <h1>ERme Scanner</h1>
             <p>ระบบบันทึกบัญชีอัจฉริยะ</p>
         </div>
-
         <div class="content">
+            <!-- ส่วนที่ 1: หน้าจออัปโหลด -->
             <div id="upload-section">
                 <i class="bi bi-cloud-arrow-up-fill"></i>
                 <h3 style="margin-bottom: 5px;">อัปโหลดสลิป</h3>
                 <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px;">
                     รองรับสลิปโอนเงินจากทุกธนาคาร
                 </p>
-                <label for="slip-upload" class="btn" style="background-color: var(--primary); color: white;">
+                <label for="slip-upload" class="btn" style="background-color: var(--primary); color: white; pointer-events: none;">
                     <i class="bi bi-image"></i> เลือกรูปภาพจากอัลบั้ม
                 </label>
                 <input type="file" id="slip-upload" accept="image/*">
             </div>
 
+            <!-- ส่วนที่ 2: แสดงสถานะกำลังประมวลผล -->
             <div id="processing-section" style="display: none; text-align: center; padding: 40px 0;">
                 <div class="spinner" style="font-size: 40px; color: var(--primary); margin-bottom: 15px;">
                     <i class="bi bi-arrow-repeat" style="display: inline-block; animation: spin 1.5s linear infinite;"></i>
                 </div>
-                <h3>กำลังอ่านข้อมูลสลิป...</h3>
-                <p style="color: var(--text-muted);">ระบบกำลังใช้ AI ดึงยอดเงินและวันที่</p>
+                <h3 id="processing-text">กำลังอ่านข้อมูลสลิป...</h3>
+                <div style="width: 100%; background: #e2e8f0; border-radius: 10px; height: 8px; margin-top: 15px; overflow: hidden;">
+                    <div id="progress-fill" style="width: 0%; background: var(--primary); height: 100%; transition: width 0.3s;"></div>
+                </div>
                 <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
             </div>
 
+            <!-- ส่วนที่ 3: แสดงผลลัพธ์ -->
             <div id="results-section" style="display: none;">
                 <div class="result-card" id="slip-result-details"></div>
-
-                <button id="copy-data-btn" class="btn btn-outline">
-                    <i class="bi bi-files"></i> คัดลอกข้อมูล
-                </button>
-
+                <button id="copy-data-btn" class="btn btn-outline"><i class="bi bi-files"></i> คัดลอกข้อมูล</button>
                 <div style="margin-top: 20px;">
                     <button id="toggle-raw-data" class="btn btn-outline" style="font-size: 14px; padding: 8px;">
                         <i class="bi bi-chevron-down"></i> <span class="toggle-text">แสดงข้อมูลดิบ (OCR)</span>
                     </button>
                     <div id="raw-data-content"></div>
-                    <button id="copy-raw-btn" class="btn btn-outline" style="display: none; margin-top: 10px; font-size: 12px;">
-                        คัดลอกข้อมูลดิบ
-                    </button>
                 </div>
-
                 <button class="btn btn-outline" style="margin-top: 20px;" onclick="location.reload()">
                     <i class="bi bi-arrow-counterclockwise"></i> สแกนรูปใหม่
                 </button>
             </div>
 
+            <!-- ส่วนที่ 4: แสดง Error -->
             <div id="error-section" style="display: none; text-align: center; padding: 40px 0;">
                 <i class="bi bi-x-circle text-danger" style="font-size: 48px; color: #dc2626;"></i>
                 <h3 style="color: #dc2626; margin: 15px 0;">เกิดข้อผิดพลาด</h3>
                 <p id="error-message" style="color: var(--text-muted); margin-bottom: 20px;"></p>
-                <button class="btn" style="background-color: var(--primary); color: white;" onclick="location.reload()">
-                    ลองใหม่อีกครั้ง
-                </button>
+                <button class="btn" style="background-color: var(--primary); color: white;" onclick="location.reload()">ลองใหม่อีกครั้ง</button>
             </div>
         </div>
     </div>
 
-    <script src="ImagePreviewManager.js"></script>
-    <script src="OCRProcessor.js"></script>
-    <script src="QRCropSelector.js"></script>
-    <script src="QRScanner.js"></script>
-    <script src="SlipParser.js"></script>
-    <script src="SlipVerifier.js"></script>
+    <!-- โหลดสคริปต์ (บังคับเวอร์ชันใหม่สุด) -->
+    <script src="ImagePreviewManager.js?v=9999"></script>
+    <script src="OCRProcessor.js?v=9999"></script>
+    <script src="QRCropSelector.js?v=9999"></script>
+    <script src="QRScanner.js?v=9999"></script>
+    <script src="SlipParser.js?v=9999"></script>
+    <script src="SlipVerifier.js?v=9999"></script>
     <script src="app.js?v=9999"></script> 
-
 </body>
 </html>

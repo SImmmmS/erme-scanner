@@ -1,7 +1,6 @@
 /**
  * app.js
- * ไฟล์หลักสำหรับเริ่มต้นแอปพลิเคชัน
- * ระบบตรวจสอบสลิปการโอนเงิน (ฉบับแก้บั๊กสมบูรณ์)
+ * ไฟล์หลักสำหรับเริ่มต้นแอปพลิเคชัน (ฉบับแก้บั๊กและเพิ่มปุ่มบันทึก ERme สมบูรณ์แบบ)
  */
 
 let slipVerifier = null;
@@ -18,29 +17,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     slipVerifier = new SlipVerifier(debugMode);
     window.slipVerifier = slipVerifier;
 
-    if (debugMode) {
-      console.log('Debug Mode Enabled');
-    }
-
     hideLoadingState();
     console.log('Slip Verifier Application started successfully');
 
   } catch (error) {
     console.error('Failed to start application:', error);
-    // ดึงข้อความ error ออกมาตรงๆ ป้องกันปัญหาตัวแปรว่างเปล่า
-    const errorMessage = error.message ? error.message : "เกิดข้อผิดพลาดในการโหลดระบบ";
-    showErrorState(errorMessage);
+    // ดึง error ออกมาแบบ String ป้องกันบั๊ก
+    const errorMsg = error.message ? error.message : "ระบบทำงานผิดพลาด";
+    showErrorState(errorMsg);
   }
 });
 
 function checkBrowserSupport() {
-  const requiredFeatures = [
-    'navigator.mediaDevices',
-    'navigator.clipboard',
-    'FileReader',
-    'URL.createObjectURL'
-  ];
-
+  const requiredFeatures = ['navigator.mediaDevices', 'navigator.clipboard', 'FileReader', 'URL.createObjectURL'];
   const missingFeatures = requiredFeatures.filter(feature => {
     try { return !eval(feature); } catch (e) { return true; }
   });
@@ -55,7 +44,7 @@ function showLoadingState() {
     '<div id="app-loading" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(248, 250, 252, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; font-family: \'Kanit\', sans-serif;">' +
       '<div class="loading-spinner" style="width: 60px; height: 60px; border: 4px solid #e2e8f0; border-top: 4px solid #2563eb; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>' +
       '<h3 style="color: #2563eb; margin-bottom: 10px; font-weight: 600;">กำลังเริ่มต้นระบบ</h3>' +
-      '<p style="color: #64748b; text-align: center; max-width: 300px;">กำลังโหลดระบบตรวจสอบสลิปการโอนเงิน<br>กรุณารอสักครู่...</p>' +
+      '<p style="color: #64748b; text-align: center;">กำลังโหลดระบบตรวจสอบสลิปการโอนเงิน<br>กรุณารอสักครู่...</p>' +
     '</div>' +
     '<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>';
 
@@ -70,13 +59,11 @@ function hideLoadingState() {
   }
 }
 
-// ---------------------------------------------------------
-// ฟังก์ชันแก้บั๊ก ${message} อย่างเด็ดขาด (ใช้วิธีต่อ String แทน)
-// ---------------------------------------------------------
+// ------------------------------------------------------------------
+// ฟังก์ชันนี้แก้บั๊ก ${message} เรียบร้อยแล้ว (ใช้วิธีต่อ String)
+// ------------------------------------------------------------------
 function showErrorState(message) {
   hideLoadingState();
-  
-  // ตรวจสอบความถูกต้องของข้อความก่อนแสดงผล
   const safeMessage = (message && typeof message === 'string') ? message : "ไม่สามารถระบุสาเหตุได้";
 
   const errorHtml = 
@@ -101,16 +88,12 @@ window.addEventListener('beforeunload', async () => {
 
 window.addEventListener('error', (event) => {
   console.error('Global error:', event.error);
-  if (slipVerifier) {
-    slipVerifier.showToast('เกิดข้อผิดพลาดที่ไม่คาดคิด', 'error');
-  }
+  if (slipVerifier) slipVerifier.showToast('เกิดข้อผิดพลาดที่ไม่คาดคิด', 'error');
 });
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
-  if (slipVerifier) {
-    slipVerifier.showToast('เกิดข้อผิดพลาดในการประมวลผล', 'error');
-  }
+  if (slipVerifier) slipVerifier.showToast('เกิดข้อผิดพลาดในการประมวลผล', 'error');
   event.preventDefault();
 });
 
@@ -161,13 +144,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (copyDataBtn) {
     copyDataBtn.addEventListener('click', copySlipData);
     
-    // สร้างปุ่มบันทึกบัญชี ERme
+    // =========================================================================
+    // สร้างปุ่ม "บันทึกลงบัญชี ERme" แบบอัตโนมัติ
+    // =========================================================================
     if (!document.getElementById('save-erme-btn')) {
       const saveErmeBtn = document.createElement('button');
       saveErmeBtn.id = 'save-erme-btn';
       saveErmeBtn.className = copyDataBtn.className || 'btn btn-primary';
       saveErmeBtn.style.cssText = copyDataBtn.style.cssText;
-      saveErmeBtn.style.backgroundColor = '#00c300';
+      saveErmeBtn.style.backgroundColor = '#00c300'; // สีเขียว LINE
       saveErmeBtn.style.color = 'white';
       saveErmeBtn.style.marginTop = '10px';
       saveErmeBtn.style.width = '100%';
@@ -191,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ฟังก์ชันคัดลอก (เปลี่ยนมาใช้ต่อ String ธรรมดาเพื่อความปลอดภัยสูงสุด)
 async function copySlipData() {
   try {
     if (!slipVerifier || !slipVerifier.currentSlipData) throw new Error('ไม่มีข้อมูลสลิปให้คัดลอก');
@@ -226,8 +212,6 @@ async function copyRawData() {
       "สถิติการประมวลผล:\n" +
       "- ความมั่นใจ: " + (debugData.confidence ? Math.round(debugData.confidence) + '%' : '-') + "\n" +
       "- เวลาประมวลผล: " + (debugData.processingTime || '-') + " ms\n" +
-      "- ตัวอักษรทั้งหมด: " + (debugData.improvedText?.length || 0) + "\n" +
-      "- ตัวอักษรไทย: " + ((debugData.improvedText?.match(/[\u0E00-\u0E7F]/g) || []).length) + "\n\n" +
       "สร้างโดยระบบตรวจสอบสลิป\nเวลา: " + new Date().toLocaleString('th-TH');
 
     await navigator.clipboard.writeText(rawData);
@@ -239,26 +223,22 @@ async function copyRawData() {
 }
 
 function setQRData(qrData) {
-  if (slipVerifier) {
-    slipVerifier.currentQRData = qrData;
-  }
+  if (slipVerifier) slipVerifier.currentQRData = qrData;
 }
 
 function clearQRData() {
-  if (slipVerifier) {
-    slipVerifier.currentQRData = null;
-  }
+  if (slipVerifier) slipVerifier.currentQRData = null;
 }
 
 window.SlipVerifierApp = {
   getInstance: () => slipVerifier,
   restart: () => location.reload(),
-  version: '1.0.1' 
+  version: '1.0.2'
 };
 
-// ---------------------------------------------------------
-// ระบบบันทึกเข้า Google Sheets
-// ---------------------------------------------------------
+// ============================================================================
+// ฟังก์ชันส่งข้อมูลเข้าระบบ ERme (Google Sheets)
+// ============================================================================
 async function sendDataToERme(parsedSlipData) {
   const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzYTTZuYODNuBGZ6ksk4smqgStgiJ42ilxpyEdjhbXPDTYcBR646E06150rpxNCVF-rBg/exec";
   

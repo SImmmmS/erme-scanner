@@ -1,541 +1,112 @@
-/**
- * app.js
- * ไฟล์หลักสำหรับเริ่มต้นแอปพลิเคชัน
- * ระบบตรวจสอบสลิปการโอนเงิน
- */
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ERme - สแกนสลิป</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
-// ตัวแปรสำหรับเก็บ instance หลัก
-let slipVerifier = null;
+    <style>
+        :root { --primary: #00c300; --bg-color: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Kanit', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 480px; background-color: var(--card-bg); min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+        .header { background-color: var(--primary); color: white; padding: 20px; text-align: center; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; box-shadow: 0 4px 10px rgba(0,195,0,0.2); }
+        .header h1 { font-size: 24px; font-weight: 600; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .content { padding: 20px; flex: 1; }
+        #upload-section { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; border: 2px dashed #cbd5e1; border-radius: 16px; margin-top: 20px; background-color: #f1f5f9; cursor: pointer; transition: all 0.3s ease; }
+        #upload-section:hover { border-color: var(--primary); background-color: #f0fdf4; }
+        #upload-section i { font-size: 48px; color: var(--primary); margin-bottom: 10px; }
+        input[type="file"] { display: none; }
+        .btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; border: none; transition: background-color 0.2s; margin-bottom: 10px; }
+        .btn i { margin-right: 8px; }
+        .btn-outline { background-color: transparent; border: 1px solid #cbd5e1; color: var(--text-main); }
+        .btn-outline:hover { background-color: #f1f5f9; }
+        .result-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .result-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .result-item:last-child { border-bottom: none; }
+        .result-label { color: var(--text-muted); font-size: 14px; }
+        .result-value { font-weight: 500; text-align: right; }
+        .amount-highlight { font-size: 24px; color: var(--primary); font-weight: 600; }
+        #raw-data-content { display: none; background: #1e293b; color: #10b981; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; margin-top: 10px; overflow-x: auto; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
 
-/**
- * เริ่มต้นแอปพลิเคชันเมื่อ DOM โหลดเสร็จ
- */
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    console.log('Starting Slip Verifier Application...');
-
-    // แสดง loading state
-    showLoadingState();
-
-    // ตรวจสอบการรองรับของเบราว์เซอร์
-    checkBrowserSupport();
-
-    // ตรวจสอบ debug mode จาก URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const debugMode = urlParams.get('debug') === 'true';
-
-    // เริ่มต้น Slip Verifier
-    slipVerifier = new SlipVerifier(debugMode);
-
-    // ทำให้ slipVerifier เป็น global variable
-    window.slipVerifier = slipVerifier;
-
-    if (debugMode) {
-      console.log('🐛 Debug Mode Enabled');
-    }
-
-    // ซ่อน loading state
-    hideLoadingState();
-
-    console.log('Slip Verifier Application started successfully');
-
-  } catch (error) {
-    console.error('Failed to start application:', error);
-    showErrorState(error.message);
-  }
-});
-
-/**
- * ตรวจสอบการรองรับของเบราว์เซอร์
- */
-function checkBrowserSupport() {
-  const requiredFeatures = [
-    'navigator.mediaDevices',
-    'navigator.clipboard',
-    'FileReader',
-    'URL.createObjectURL'
-  ];
-
-  const missingFeatures = requiredFeatures.filter(feature => {
-    try {
-      return !eval(feature);
-    } catch (e) {
-      return true;
-    }
-  });
-
-  if (missingFeatures.length > 0) {
-    throw new Error(`เบราว์เซอร์ไม่รองรับฟีเจอร์: ${missingFeatures.join(', ')}`);
-  }
-}
-
-/**
- * แสดง loading state
- */
-function showLoadingState() {
-  const loadingHtml = `
-        <div id="app-loading" style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(248, 250, 252, 0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            font-family: 'Kanit', sans-serif;
-        ">
-            <div class="loading-spinner" style="
-                width: 60px;
-                height: 60px;
-                border: 4px solid #e2e8f0;
-                border-top: 4px solid #2563eb;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-bottom: 20px;
-            "></div>
-            <h3 style="color: #2563eb; margin-bottom: 10px; font-weight: 600;">
-                กำลังเริ่มต้นระบบ
-            </h3>
-            <p style="color: #64748b; text-align: center; max-width: 300px;">
-                กำลังโหลดระบบตรวจสอบสลิปการโอนเงิน<br>
-                กรุณารอสักครู่...
-            </p>
+    <div class="container">
+        <div class="header">
+            <h1>ERme Scanner</h1>
+            <p>ระบบบันทึกบัญชีอัจฉริยะ</p>
         </div>
-        <style>
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        </style>
-    `;
 
-  document.body.insertAdjacentHTML('beforeend', loadingHtml);
-}
-
-/**
- * ซ่อน loading state
- */
-function hideLoadingState() {
-  const loadingElement = document.getElementById('app-loading');
-  if (loadingElement) {
-    loadingElement.style.opacity = '0';
-    setTimeout(() => loadingElement.remove(), 300);
-  }
-}
-
-/**
- * แสดง error state
- */
-function showErrorState(message) {
-  hideLoadingState();
-
-  const errorHtml = `
-        <div id="app-error" style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(248, 250, 252, 0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            font-family: 'Kanit', sans-serif;
-            text-align: center;
-            padding: 20px;
-        ">
-            <div style="
-                background: white;
-                padding: 40px;
-                border-radius: 12px;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-                max-width: 500px;
-            ">
-                <div style="
-                    font-size: 4rem;
-                    color: #dc2626;
-                    margin-bottom: 20px;
-                ">
-                    <i class="bi bi-exclamation-triangle"></i>
-                </div>
-                <h3 style="color: #dc2626; margin-bottom: 15px; font-weight: 600;">
-                    เกิดข้อผิดพลาด
-                </h3>
-                <p style="color: #64748b; margin-bottom: 25px; line-height: 1.6;">
-                    ${message}
+        <div class="content">
+            <div id="upload-section">
+                <i class="bi bi-cloud-arrow-up-fill"></i>
+                <h3 style="margin-bottom: 5px;">อัปโหลดสลิป</h3>
+                <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px;">
+                    รองรับสลิปโอนเงินจากทุกธนาคาร
                 </p>
-                <button onclick="location.reload()" style="
-                    background: #2563eb;
-                    color: white;
-                    border: none;
-                    padding: 12px 24px;
-                    border-radius: 8px;
-                    font-family: 'Kanit', sans-serif;
-                    font-weight: 500;
-                    cursor: pointer;
-                    font-size: 16px;
-                ">
-                    <i class="bi bi-arrow-counterclockwise"></i> ลองใหม่
+                <label for="slip-upload" class="btn" style="background-color: var(--primary); color: white;">
+                    <i class="bi bi-image"></i> เลือกรูปภาพจากอัลบั้ม
+                </label>
+                <input type="file" id="slip-upload" accept="image/*">
+            </div>
+
+            <div id="processing-section" style="display: none; text-align: center; padding: 40px 0;">
+                <div class="spinner" style="font-size: 40px; color: var(--primary); margin-bottom: 15px;">
+                    <i class="bi bi-arrow-repeat" style="display: inline-block; animation: spin 1.5s linear infinite;"></i>
+                </div>
+                <h3>กำลังอ่านข้อมูลสลิป...</h3>
+                <p style="color: var(--text-muted);">ระบบกำลังใช้ AI ดึงยอดเงินและวันที่</p>
+                <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+            </div>
+
+            <div id="results-section" style="display: none;">
+                <div class="result-card" id="slip-result-details"></div>
+
+                <button id="copy-data-btn" class="btn btn-outline">
+                    <i class="bi bi-files"></i> คัดลอกข้อมูล
+                </button>
+
+                <div style="margin-top: 20px;">
+                    <button id="toggle-raw-data" class="btn btn-outline" style="font-size: 14px; padding: 8px;">
+                        <i class="bi bi-chevron-down"></i> <span class="toggle-text">แสดงข้อมูลดิบ (OCR)</span>
+                    </button>
+                    <div id="raw-data-content"></div>
+                    <button id="copy-raw-btn" class="btn btn-outline" style="display: none; margin-top: 10px; font-size: 12px;">
+                        คัดลอกข้อมูลดิบ
+                    </button>
+                </div>
+
+                <button class="btn btn-outline" style="margin-top: 20px;" onclick="location.reload()">
+                    <i class="bi bi-arrow-counterclockwise"></i> สแกนรูปใหม่
+                </button>
+            </div>
+
+            <div id="error-section" style="display: none; text-align: center; padding: 40px 0;">
+                <i class="bi bi-x-circle text-danger" style="font-size: 48px; color: #dc2626;"></i>
+                <h3 style="color: #dc2626; margin: 15px 0;">เกิดข้อผิดพลาด</h3>
+                <p id="error-message" style="color: var(--text-muted); margin-bottom: 20px;"></p>
+                <button class="btn" style="background-color: var(--primary); color: white;" onclick="location.reload()">
+                    ลองใหม่อีกครั้ง
                 </button>
             </div>
         </div>
-    `;
+    </div>
 
-  document.body.insertAdjacentHTML('beforeend', errorHtml);
-}
+    <script src="ImagePreviewManager.js"></script>
+    <script src="OCRProcessor.js"></script>
+    <script src="QRCropSelector.js"></script>
+    <script src="QRScanner.js"></script>
+    <script src="SlipParser.js"></script>
+    <script src="SlipVerifier.js"></script>
+    <script src="app.js?v=9999"></script> 
 
-/**
- * จัดการเมื่อหน้าต่างปิด
- */
-window.addEventListener('beforeunload', async () => {
-  if (slipVerifier && typeof slipVerifier.destroy === 'function') {
-    await slipVerifier.destroy();
-  }
-});
-
-/**
- * จัดการ errors ทั่วไป
- */
-window.addEventListener('error', (event) => {
-  console.error('Global error:', event.error);
-
-  if (slipVerifier) {
-    slipVerifier.showToast('เกิดข้อผิดพลาดที่ไม่คาดคิด', 'error');
-  }
-});
-
-/**
- * จัดการ Promise rejections
- */
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
-
-  if (slipVerifier) {
-    slipVerifier.showToast('เกิดข้อผิดพลาดในการประมวลผล', 'error');
-  }
-
-  event.preventDefault();
-});
-
-/**
- * ฟังก์ชันสำหรับการ debug (สำหรับ development)
- */
-if (window.location.search.includes('debug=true')) {
-  window.slipVerifier = slipVerifier;
-  console.log('Debug mode enabled');
-
-  // เพิ่มปุ่ม debug
-  document.addEventListener('DOMContentLoaded', () => {
-    const debugBtn = document.createElement('button');
-    debugBtn.innerHTML = '<i class="bi bi-bug"></i> Debug';
-    debugBtn.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #f59e0b;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            z-index: 1000;
-            cursor: pointer;
-        `;
-
-    debugBtn.addEventListener('click', () => {
-      console.log('Current SlipVerifier instance:', slipVerifier);
-      console.log('OCR Processor:', slipVerifier?.ocrProcessor);
-      console.log('Slip Parser:', slipVerifier?.slipParser);
-    });
-
-    document.body.appendChild(debugBtn);
-  });
-}
-
-/**
- * Service Worker Registration (สำหรับอนาคต)
- */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // navigator.serviceWorker.register('/sw.js')
-    //     .then(registration => console.log('SW registered'))
-    //     .catch(error => console.log('SW registration failed'));
-  });
-}
-
-/**
- * เช็คการเชื่อมต่ออินเทอร์เน็ต
- */
-window.addEventListener('online', () => {
-  if (slipVerifier) {
-    slipVerifier.showToast('เชื่อมต่ออินเทอร์เน็ตแล้ว', 'success');
-  }
-});
-
-window.addEventListener('offline', () => {
-  if (slipVerifier) {
-    slipVerifier.showToast('ไม่มีการเชื่อมต่ออินเทอร์เน็ต', 'warning');
-  }
-});
-
-/**
- * ซ่อนส่วนทั้งหมด
- */
-function hideAllSections() {
-  const sections = [
-    'upload-section',
-    'camera-section',
-    'qr-section',
-    'processing-section',
-    'results-section',
-    'error-section'
-  ];
-
-  sections.forEach(sectionId => {
-    const section = document.getElementById(sectionId);
-    if (section) {
-      section.style.display = 'none';
-    }
-  });
-}
-
-/**
- * เพิ่ม Event Listeners สำหรับฟีเจอร์ใหม่
- */
-document.addEventListener('DOMContentLoaded', () => {
-  // Toggle สำหรับแสดง/ซ่อนข้อมูล OCR ดิบ
-  const toggleRawDataBtn = document.getElementById('toggle-raw-data');
-  const rawDataContent = document.getElementById('raw-data-content');
-
-  if (toggleRawDataBtn && rawDataContent) {
-    toggleRawDataBtn.addEventListener('click', () => {
-      const isExpanded = toggleRawDataBtn.getAttribute('data-expanded') === 'true';
-      const icon = toggleRawDataBtn.querySelector('i');
-      const text = toggleRawDataBtn.querySelector('.toggle-text');
-
-      if (isExpanded) {
-        // ซ่อนข้อมูล
-        rawDataContent.style.display = 'none';
-        toggleRawDataBtn.setAttribute('data-expanded', 'false');
-        icon.className = 'bi bi-chevron-down';
-        text.textContent = 'แสดงข้อมูลดิบ';
-      } else {
-        // แสดงข้อมูล
-        rawDataContent.style.display = 'block';
-        toggleRawDataBtn.setAttribute('data-expanded', 'true');
-        icon.className = 'bi bi-chevron-up';
-        text.textContent = 'ซ่อนข้อมูลดิบ';
-      }
-    });
-  }
-
-  // ปุ่มคัดลอกข้อมูลดิบ
-  const copyRawBtn = document.getElementById('copy-raw-btn');
-  if (copyRawBtn) {
-    copyRawBtn.addEventListener('click', copyRawData);
-  }
-
-  // อัปเดตปุ่มคัดลอกข้อมูลเดิม
-  const copyDataBtn = document.getElementById('copy-data-btn');
-  if (copyDataBtn) {
-    copyDataBtn.addEventListener('click', copySlipData);
-    
-    // =========================================================================
-    // ส่วนที่เพิ่มใหม่: สร้างปุ่ม "บันทึกลงบัญชี ERme" แทรกต่อจากปุ่มคัดลอก
-    // =========================================================================
-    if (!document.getElementById('save-erme-btn')) {
-      const saveErmeBtn = document.createElement('button');
-      saveErmeBtn.id = 'save-erme-btn';
-      saveErmeBtn.className = copyDataBtn.className || 'btn btn-primary';
-      saveErmeBtn.style.cssText = copyDataBtn.style.cssText;
-      saveErmeBtn.style.backgroundColor = '#00c300'; // สีเขียวสไตล์ LINE
-      saveErmeBtn.style.color = 'white';
-      saveErmeBtn.style.marginTop = '10px';
-      saveErmeBtn.style.width = '100%';
-      saveErmeBtn.style.border = 'none';
-      saveErmeBtn.style.padding = '10px';
-      saveErmeBtn.style.borderRadius = '8px';
-      saveErmeBtn.style.fontWeight = 'bold';
-      saveErmeBtn.style.cursor = 'pointer';
-      saveErmeBtn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> บันทึกลงบัญชี ERme';
-      
-      saveErmeBtn.addEventListener('click', () => {
-        if (window.slipVerifier && window.slipVerifier.currentSlipData) {
-          sendDataToERme(window.slipVerifier.currentSlipData);
-        } else {
-          window.slipVerifier.showToast('ไม่มีข้อมูลสลิปสำหรับบันทึก', 'warning');
-        }
-      });
-      
-      // แทรกปุ่มต่อจากปุ่มคัดลอกในหน้า HTML
-      copyDataBtn.parentNode.insertBefore(saveErmeBtn, copyDataBtn.nextSibling);
-    }
-  }
-});
-
-/**
- * คัดลอกข้อมูลสลิปแบบจัดรูปแบบ
- */
-async function copySlipData() {
-  try {
-    if (!slipVerifier || !slipVerifier.currentSlipData) {
-      throw new Error('ไม่มีข้อมูลสลิปให้คัดลอก');
-    }
-
-    const data = slipVerifier.currentSlipData;
-    const formattedData = `ข้อมูลสลิปการโอนเงิน
-===================
-ธนาคาร: ${data.bank?.name || '-'}
-จำนวนเงิน: ${SlipParser.formatAmount ? SlipParser.formatAmount(data.amount) : data.amount}
-วันที่-เวลา: ${SlipParser.formatDateTime ? SlipParser.formatDateTime(data.datetime) : data.datetime}
-ผู้โอน: ${data.sender || '-'}
-ผู้รับ: ${data.receiver || '-'}
-รหัสอ้างอิง: ${data.reference || '-'}
-
-สร้างโดยระบบตรวจสอบสลิป
-เวลา: ${new Date().toLocaleString('th-TH')}`;
-
-    await navigator.clipboard.writeText(formattedData);
-    slipVerifier.showToast('คัดลอกข้อมูลแล้ว', 'success');
-
-  } catch (error) {
-    console.error('Copy slip data failed:', error);
-    slipVerifier.showToast('ไม่สามารถคัดลอกข้อมูลได้', 'error');
-  }
-}
-
-/**
- * คัดลอกข้อมูล OCR ดิบ
- */
-async function copyRawData() {
-  try {
-    if (!slipVerifier || !slipVerifier.ocrProcessor) {
-      throw new Error('ไม่มีข้อมูล OCR ให้คัดลอก');
-    }
-
-    const debugData = slipVerifier.ocrProcessor.getDebugData();
-    const rawData = `ข้อมูล OCR ดิบ
-================
-ข้อความต้นฉบับ:
-${debugData.rawText || 'ไม่มีข้อมูล'}
-
-ข้อความหลังปรับปรุง:
-${debugData.improvedText || 'ไม่มีข้อมูล'}
-
-สถิติการประมวลผล:
-- ความมั่นใจ: ${debugData.confidence ? Math.round(debugData.confidence) + '%' : '-'}
-- เวลาประมวลผล: ${debugData.processingTime || '-'} ms
-- ตัวอักษรทั้งหมด: ${debugData.improvedText?.length || 0}
-- ตัวอักษรไทย: ${(debugData.improvedText?.match(/[\u0E00-\u0E7F]/g) || []).length}
-
-สร้างโดยระบบตรวจสอบสลิป
-เวลา: ${new Date().toLocaleString('th-TH')}`;
-
-    await navigator.clipboard.writeText(rawData);
-    slipVerifier.showToast('คัดลอกข้อมูล OCR แล้ว', 'success');
-
-  } catch (error) {
-    console.error('Copy raw data failed:', error);
-    slipVerifier.showToast('ไม่สามารถคัดลอกข้อมูลได้', 'error');
-  }
-}
-
-/**
- * ฟังก์ชันช่วยสำหรับการจัดการ QR Data
- */
-function setQRData(qrData) {
-  if (slipVerifier) {
-    slipVerifier.currentQRData = qrData;
-    console.log('QR Data set:', qrData);
-  }
-}
-
-/**
- * ล้างข้อมูล QR
- */
-function clearQRData() {
-  if (slipVerifier) {
-    slipVerifier.currentQRData = null;
-    console.log('QR Data cleared');
-  }
-}
-
-/**
- * Export สำหรับการใช้งานภายนอก
- */
-window.SlipVerifierApp = {
-  getInstance: () => slipVerifier,
-  restart: () => location.reload(),
-  version: '1.0.0'
-};
-
-// ============================================================================
-// ฟังก์ชันใหม่: สำหรับส่งข้อมูลไปบันทึกลงฐานข้อมูล ERme (Google Sheets ผ่าน GAS)
-// ============================================================================
-async function sendDataToERme(parsedSlipData) {
-  // ลิงก์ Web App URL ที่คุณให้มา
-  const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzYTTZuYODNuBGZ6ksk4smqgStgiJ42ilxpyEdjhbXPDTYcBR646E06150rpxNCVF-rBg/exec";
-  
-  // แปลงจำนวนเงินให้เป็นตัวเลขเพียวๆ ไม่มีคอมม่า เพื่อให้ลงบัญชีได้ง่าย
-  let amountStr = parsedSlipData.amount ? String(parsedSlipData.amount).replace(/,/g, '') : "0";
-  
-  // สร้างโครงสร้าง Payload
-  const payload = {
-    action: "save_slip_from_frontend",
-    amount: amountStr, 
-    datetime: parsedSlipData.datetime || "ไม่ระบุ",
-    sender: parsedSlipData.sender || "-",
-    receiver: parsedSlipData.receiver || "-"
-  };
-
-  const btn = document.getElementById('save-erme-btn');
-
-  try {
-    // เปลี่ยนสถานะปุ่ม
-    if(btn) {
-      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังบันทึกข้อมูล...';
-      btn.disabled = true;
-    }
-
-    // ยิง Request เข้าสู่ระบบ GAS (ใช้แบบ text/plain ป้องกันปัญหา CORS ฝั่งเบราว์เซอร์)
-    const response = await fetch(GAS_WEB_APP_URL, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    
-    const result = await response.json();
-    if (result.status === "success") {
-      if(window.slipVerifier) {
-        window.slipVerifier.showToast('✅ บันทึกลงบัญชี ERme เรียบร้อยแล้ว!', 'success');
-      } else {
-        alert("✅ บันทึกลงบัญชี ERme เรียบร้อยแล้ว!");
-      }
-    } else {
-      if(window.slipVerifier) {
-        window.slipVerifier.showToast('❌ เกิดข้อผิดพลาด: ' + result.message, 'error');
-      } else {
-        alert("❌ เกิดข้อผิดพลาด: " + result.message);
-      }
-    }
-    
-  } catch (error) {
-    console.error("Error sending to GAS:", error);
-    if(window.slipVerifier) {
-      window.slipVerifier.showToast('❌ ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้', 'error');
-    } else {
-      alert("❌ ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้");
-    }
-  } finally {
-    // คืนสถานะปุ่มให้กลับมาเหมือนเดิม
-    if(btn) {
-      btn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> บันทึกลงบัญชี ERme';
-      btn.disabled = false;
-    }
-  }
-}
+</body>
+</html>

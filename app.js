@@ -253,7 +253,7 @@ function clearQRData() {
 window.SlipVerifierApp = {
   getInstance: () => slipVerifier,
   restart: () => location.reload(),
-  version: '1.0.1' // อัปเดตเวอร์ชันให้รู้ว่าแก้บั๊กแล้ว
+  version: '1.0.1' 
 };
 
 // ---------------------------------------------------------
